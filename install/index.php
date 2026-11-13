@@ -1,35 +1,40 @@
 <?php
 session_start();
 
-$currentStep = isset($_GET['step']) ? $_GET['step'] : 1;
+require_once __DIR__ . '/libs/Encryption.php';
+require_once __DIR__ . '/functions.php';
 
-if (file_exists("../config.php")) {
-  echo '<meta http-equiv="refresh" content="0; url=../" />';
+$installerConfig = getInstallerConfig();
+$encryption      = new Encryption();
+
+// Bloqueo de seguridad si la aplicación ya está instalada
+if (!empty($installerConfig['security']['block_if_installed']) && isAlreadyInstalled($installerConfig)) {
+  header('Location: ../');
   exit;
 }
 
-require_once "libs/Encryption.php";
-require_once "functions.php";
-
-$encryption = new Encryption();
+$currentStep = isset($_GET['step']) ? (int)$_GET['step'] : 1;
+if ($currentStep < 1 || $currentStep > 5) {
+  $currentStep = 1;
+}
 
 switch ($currentStep) {
   case 1:
-    include 'steps/step1_welcome.php';
+    include __DIR__ . '/steps/step1_welcome.php';
     break;
   case 2:
-    include 'steps/step2_requirements.php';
+    include __DIR__ . '/steps/step2_requirements.php';
     break;
   case 3:
-    include 'steps/step3_database.php';
+    include __DIR__ . '/steps/step3_database.php';
     break;
   case 4:
-    include 'steps/step4_siteconfig.php';
+    include __DIR__ . '/steps/step4_siteconfig.php';
     break;
   case 5:
-    include 'steps/step5_finish.php';
+    include __DIR__ . '/steps/step5_finish.php';
     break;
   default:
-    include 'steps/step1_welcome.php';
+    include __DIR__ . '/steps/step1_welcome.php';
     break;
 }

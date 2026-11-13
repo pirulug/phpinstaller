@@ -1,86 +1,153 @@
 <?php
 
-function checkPHPVersion($requiredVersion) {
-  return version_compare(PHP_VERSION, $requiredVersion, '>=');
-}
+$reqConfig          = $installerConfig['requirements'] ?? [];
+$requiredPHPVersion = $reqConfig['php_version'] ?? '8.0.0';
+$requiredExtensions = $reqConfig['extensions'] ?? ['pdo', 'pdo_mysql', 'mbstring'];
+$writablePaths      = $reqConfig['writable_paths'] ?? ['../'];
 
-function checkExtensions($requiredExtensions) {
-  $results = [];
-  foreach ($requiredExtensions as $extension) {
-    $results[$extension] = extension_loaded($extension);
+$phpVersionOk     = version_compare(PHP_VERSION, $requiredPHPVersion, '>=');
+$extensionResults = [];
+foreach ($requiredExtensions as $ext) {
+  $extensionResults[$ext] = extension_loaded($ext);
+}
+$allExtensionsOk = !in_array(false, $extensionResults, true);
+
+$writableResults = [];
+foreach ($writablePaths as $path) {
+  $fullPath = __DIR__ . '/../' . ltrim($path, '/');
+  if ($path === '../' || $path === '..') {
+    $fullPath = dirname(__DIR__);
   }
-  return $results;
+  $isWritable = is_writable($fullPath);
+  $writableResults[$path] = [
+    'exists'   => file_exists($fullPath),
+    'writable' => $isWritable,
+  ];
+}
+$allWritableOk = true;
+foreach ($writableResults as $res) {
+  if (!$res['writable']) {
+    $allWritableOk = false;
+    break;
+  }
 }
 
-// Definir la versión de PHP requerida
-$requiredPHPVersion = '8.0.0';
+$canProceed = ($phpVersionOk && $allExtensionsOk && $allWritableOk);
 
-// Definir las extensiones requeridas
-$requiredExtensions = [
-  'pdo',
-  'pdo_mysql',
-  'mbstring',
-]; // Añadir más según sea necesario
-
-$phpVersionOk = checkPHPVersion($requiredPHPVersion);
-$extensionResults = checkExtensions($requiredExtensions);
-
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-  $allExtensionsOk = !in_array(false, $extensionResults, true);
-  if ($phpVersionOk && $allExtensionsOk) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  if ($canProceed) {
     header('Location: index.php?step=3');
     exit;
   } else {
-    $error = 'Por favor, asegúrate de que todas las extensiones requeridas estén habilitadas y que la versión de PHP sea la correcta.';
+    $error = 'Por favor, asegúrate de cumplir todos los requisitos antes de continuar.';
   }
 }
+
+include 'includes/header.php';
 ?>
 
-<?php include 'includes/header.php'; ?>
+<div>
+  <h2 class="step-heading">Verificación de Requisitos del Sistema</h2>
+  <p class="step-subheading">Comprobando compatibilidad con la versión de PHP, extensiones y permisos de escritura.</p>
 
-<h2>Verificación de Requisitos del Sistema</h2>
-<form method="post">
-  <h3>Versión de PHP</h3>
-  <p>
-    Versión actual: <?= PHP_VERSION; ?> - 
-    <?php if ($phpVersionOk): ?>
-      <span class="badge text-bg-success rounded-pill">
-        <i class="fa fa-check"></i> Compatible
-      </span>
-    <?php else: ?>
-      <span class="badge text-bg-danger rounded-pill">
-        <i class="fa fa-x"></i> No compatible (Requiere <?= $requiredPHPVersion; ?> o superior)
-      </span>
+  <form method="post">
+    <!-- Versión de PHP -->
+    <div class="installer-section">
+      <div class="installer-section-header">
+        <i class="bi bi-cpu text-primary"></i>
+        <span>Versión de PHP</span>
+      </div>
+      <div class="installer-section-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <span>Versión instalada: <strong><?= PHP_VERSION; ?></strong></span>
+            <span class="text-muted small ms-1">(Mínima requerida: <?= htmlspecialchars($requiredPHPVersion); ?>)</span>
+          </div>
+          <?php if ($phpVersionOk): ?>
+            <span class="badge-status badge-status-success">
+              <i class="bi bi-check-circle-fill"></i>
+              <span>Compatible</span>
+            </span>
+          <?php else: ?>
+            <span class="badge-status badge-status-danger">
+              <i class="bi bi-x-circle-fill"></i>
+              <span>Incompatible</span>
+            </span>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+
+    <!-- Extensiones Requeridas -->
+    <div class="installer-section">
+      <div class="installer-section-header">
+        <i class="bi bi-puzzle text-primary"></i>
+        <span>Extensiones PHP Requeridas</span>
+      </div>
+      <ul class="list-group list-group-flush installer-list-group">
+        <?php foreach ($extensionResults as $extension => $loaded): ?>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span class="font-monospace"><?= htmlspecialchars($extension); ?></span>
+            <?php if ($loaded): ?>
+              <span class="badge-status badge-status-success">
+                <i class="bi bi-check-lg"></i>
+                <span>Habilitada</span>
+              </span>
+            <?php else: ?>
+              <span class="badge-status badge-status-danger">
+                <i class="bi bi-x-lg"></i>
+                <span>Deshabilitada</span>
+              </span>
+            <?php endif; ?>
+          </li>
+        <?php endforeach; ?>
+      </ul>
+    </div>
+
+    <!-- Permisos de Escritura -->
+    <div class="installer-section">
+      <div class="installer-section-header">
+        <i class="bi bi-folder2-open text-primary"></i>
+        <span>Permisos de Escritura en Directorios</span>
+      </div>
+      <ul class="list-group list-group-flush installer-list-group">
+        <?php foreach ($writableResults as $path => $status): ?>
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <span class="font-monospace"><?= htmlspecialchars($path); ?></span>
+            <?php if ($status['writable']): ?>
+              <span class="badge-status badge-status-success">
+                <i class="bi bi-check-lg"></i>
+                <span>Escribible</span>
+              </span>
+            <?php else: ?>
+              <span class="badge-status badge-status-danger">
+                <i class="bi bi-x-lg"></i>
+                <span>Sin permisos</span>
+              </span>
+            <?php endif; ?>
+          </li>
+        <?php endforeach; ?>
+      </ul>
+    </div>
+
+    <?php if (isset($error)): ?>
+      <div class="installer-alert installer-alert-danger">
+        <i class="bi bi-exclamation-triangle-fill fs-5 mt-1"></i>
+        <div><?= htmlspecialchars($error); ?></div>
+      </div>
     <?php endif; ?>
-  </p>
 
-  <h3>Extensiones</h3>
-  <ul class="list-group">
-    <?php foreach ($requiredExtensions as $extension): ?>
-      <li class="list-group-item">
-        <?= $extension; ?>:
-        <?php if ($extensionResults[$extension]): ?>
-          <span class="badge text-bg-success rounded-pill">
-            <i class="fa fa-check"></i>
-            Habilitado
-          </span>
-        <?php else: ?>
-          <span class="badge text-bg-danger rounded-pill">
-            <i class="fa fa-x"></i>
-            Deshabilitado
-          </span>
-        <?php endif; ?>
-      </li>
-    <?php endforeach; ?>
-  </ul>
-
-  <?php if (isset($error)): ?>
-    <p class="alert alert-danger"><?php echo $error; ?></p>
-  <?php endif; ?>
-
-  <div class="d-grid">
-    <button class="btn btn-primary">Siguiente</button>
-  </div>
-</form>
+    <div class="d-flex justify-content-between align-items-center pt-3">
+      <a href="index.php?step=1" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2">
+        <i class="bi bi-arrow-left"></i>
+        <span>Anterior</span>
+      </a>
+      <button type="submit" class="btn btn-primary d-inline-flex align-items-center gap-2" <?= !$canProceed ? 'disabled' : '' ?>>
+        <span>Siguiente</span>
+        <i class="bi bi-arrow-right"></i>
+      </button>
+    </div>
+  </form>
+</div>
 
 <?php include 'includes/footer.php'; ?>
